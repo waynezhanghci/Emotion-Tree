@@ -1,0 +1,7 @@
+{
+  "name": "Emotion Tree",
+  "description": "An immersive interactive generative art tree driven by facial expressions and hand gestures.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
