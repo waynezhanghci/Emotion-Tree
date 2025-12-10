@@ -370,7 +370,8 @@ export const createSketch = (getTreeState: () => TreeState) => (p: p5) => {
       // Rotation
       part.angle += part.angleVel;
       part.flip += part.flipSpeed;
-      part.life -= part.isDead ? 1.5 : 0.8; // Dead leaves fade faster
+      // Double fade speed: 3.0 for dead, 1.6 for live
+      part.life -= part.isDead ? 3.0 : 1.6; 
 
       // Render
       p.push();
