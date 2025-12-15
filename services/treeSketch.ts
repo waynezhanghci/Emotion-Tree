@@ -1,9 +1,18 @@
 import p5 from "p5";
 import { TreeState } from "../types";
 
-export const createSketch = (getTreeState: () => TreeState) => (p: p5) => {
+export type TreeEventType = 'bloom' | 'wither';
+
+export const createSketch = (
+  getTreeState: () => TreeState,
+  onTreeEvent?: (event: TreeEventType) => void
+) => (p: p5) => {
   let currentMood = 0; // smoothed mood
   let currentWind = 0; // smoothed wind (signed)
+  
+  // State tracking for event triggers (Hysteresis)
+  let wasBlooming = false;
+  let wasWithering = false;
   
   // Particle system for falling leaves/flowers
   interface Particle {
@@ -130,6 +139,24 @@ export const createSketch = (getTreeState: () => TreeState) => (p: p5) => {
     // Wind Smoothing
     const targetWind = state.windForce;
     currentWind = p.lerp(currentWind, targetWind, 0.12);
+
+    // --- Event Logic (Hysteresis) ---
+    // Bloom Event: Trigger when mood > 0.6, Reset when mood < 0.2
+    if (!wasBlooming && currentMood > 0.6) {
+        wasBlooming = true;
+        if (onTreeEvent) onTreeEvent('bloom');
+    } else if (wasBlooming && currentMood < 0.2) {
+        wasBlooming = false;
+    }
+
+    // Wither Event: Trigger when mood < -0.6, Reset when mood > -0.2
+    if (!wasWithering && currentMood < -0.6) {
+        wasWithering = true;
+        if (onTreeEvent) onTreeEvent('wither');
+    } else if (wasWithering && currentMood > -0.2) {
+        wasWithering = false;
+    }
+    // --------------------------------
 
     // 2. Background
     let bgCol;

@@ -1,7 +1,13 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import SketchContainer from "./components/SketchContainer";
 import { initializeVision, analyzeFrame } from "./services/visionService";
 import { TreeState } from "./types";
+import { TreeEventType } from "./services/treeSketch";
+
+interface StatsState {
+  blooms: number;
+  date: string;
+}
 
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -15,8 +21,51 @@ const App: React.FC = () => {
     windForce: 0,
   });
 
-  // Debug state for UI feedback
-  const [debugInfo, setDebugInfo] = useState({ mood: 0, wind: 0 });
+  // Daily Statistics State
+  const [stats, setStats] = useState<StatsState>({ blooms: 0, date: "" });
+
+  // Load and initialize stats
+  useEffect(() => {
+    const today = new Date().toLocaleDateString();
+    try {
+      const stored = localStorage.getItem('emotionTreeStats');
+      if (stored) {
+        const data = JSON.parse(stored);
+        if (data.date === today) {
+          // Keep existing data, ensuring we only care about blooms now
+          setStats({ blooms: data.blooms || 0, date: data.date });
+        } else {
+          // Reset for new day
+          const newStats = { blooms: 0, date: today };
+          setStats(newStats);
+          localStorage.setItem('emotionTreeStats', JSON.stringify(newStats));
+        }
+      } else {
+        // Initialize new
+        const newStats = { blooms: 0, date: today };
+        setStats(newStats);
+        localStorage.setItem('emotionTreeStats', JSON.stringify(newStats));
+      }
+    } catch (e) {
+      console.warn("LocalStorage error", e);
+      setStats({ blooms: 0, date: today });
+    }
+  }, []);
+
+  // Callback from p5.js when a significant event occurs
+  const handleTreeEvent = useCallback((event: TreeEventType) => {
+    if (event !== 'bloom') return;
+
+    setStats((prev) => {
+      const next = { ...prev };
+      // Ensure date is current on update
+      next.date = new Date().toLocaleDateString(); 
+      next.blooms += 1;
+      
+      localStorage.setItem('emotionTreeStats', JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let animationFrameId: number;
@@ -65,11 +114,6 @@ const App: React.FC = () => {
           mood: moodScore,
           windForce: movementScore,
         };
-
-        // Throttle UI updates to avoid react lag
-        if (Math.random() > 0.92) {
-            setDebugInfo({ mood: moodScore, wind: movementScore });
-        }
       }
       animationFrameId = requestAnimationFrame(predictLoop);
     };
@@ -94,7 +138,12 @@ const App: React.FC = () => {
   return (
     <div className="relative w-full h-screen overflow-hidden bg-zinc-900 text-white font-sans">
       {/* Background P5 Sketch */}
-      {!permissionError && <SketchContainer treeStateRef={treeStateRef} />}
+      {!permissionError && (
+        <SketchContainer 
+          treeStateRef={treeStateRef} 
+          onTreeEvent={handleTreeEvent}
+        />
+      )}
 
       {/* Foreground UI Overlay */}
       <div className="absolute inset-0 pointer-events-none z-10 flex flex-col justify-between p-6">
@@ -105,29 +154,24 @@ const App: React.FC = () => {
             <h1 className="text-3xl font-bold tracking-wider text-pink-200 opacity-90 drop-shadow-lg">
               Emotion Tree
             </h1>
-            <p className="text-sm text-gray-400 mt-2 max-w-md">
-              Smile to bloom. Frown to wither. Wave for wind.
-            </p>
+            <div className="text-sm text-gray-400 mt-2 flex flex-col gap-1">
+              <p>Smile to bloom</p>
+              <p>Frown to wither</p>
+              <p>Wave for wind</p>
+            </div>
           </div>
           
-          {/* Debug / Status Indicator */}
-          <div className="bg-black/40 backdrop-blur-md rounded-lg p-3 text-xs border border-white/10">
-            <div className="mb-1 flex items-center gap-2">
-              <span className="w-16">Mood:</span>
-              <div className="w-20 h-2 bg-gray-700 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full transition-all duration-300 ${debugInfo.mood > 0 ? 'bg-green-400' : 'bg-red-400'}`}
-                  style={{ width: `${Math.abs(debugInfo.mood) * 100}%` }}
-                />
+          <div className="flex flex-col gap-3 items-end">
+            {/* Daily Stats Module */}
+            <div className="bg-black/40 backdrop-blur-md rounded-lg p-3 border border-white/10 w-32">
+              <div className="text-[10px] uppercase tracking-widest text-gray-400 mb-2 border-b border-white/10 pb-1 text-center">
+                Today
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-16">Wind:</span>
-              <div className="w-20 h-2 bg-gray-700 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-blue-400 transition-all duration-100"
-                  style={{ width: `${Math.abs(debugInfo.wind) * 100}%` }}
-                />
+              <div className="text-center">
+                <div>
+                  <div className="text-3xl font-bold text-pink-300 drop-shadow">{stats.blooms}</div>
+                  <div className="text-[10px] text-pink-200/70">Blooms 🌸</div>
+                </div>
               </div>
             </div>
           </div>
@@ -156,18 +200,15 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Hidden Video Element for MediaPipe */}
-        <div className="absolute bottom-4 right-4 pointer-events-auto">
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-32 h-24 object-cover rounded-lg border border-white/20 opacity-50 hover:opacity-100 transition-opacity"
-              style={{ transform: "scaleX(-1)" }} 
-            />
-            <p className="text-[10px] text-center mt-1 text-gray-500">Camera Feed</p>
-        </div>
+        {/* Hidden Video Element for MediaPipe Logic - Removed from UI */}
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          className="absolute opacity-0 pointer-events-none"
+          style={{ width: 1, height: 1, top: 0, left: 0, zIndex: -1 }}
+        />
       </div>
     </div>
   );

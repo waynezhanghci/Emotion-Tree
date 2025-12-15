@@ -1,13 +1,14 @@
 import React, { useRef, useEffect } from "react";
 import p5 from "p5";
-import { createSketch } from "../services/treeSketch";
+import { createSketch, TreeEventType } from "../services/treeSketch";
 import { TreeState } from "../types";
 
 interface SketchContainerProps {
   treeStateRef: React.MutableRefObject<TreeState>;
+  onTreeEvent?: (event: TreeEventType) => void;
 }
 
-const SketchContainer: React.FC<SketchContainerProps> = ({ treeStateRef }) => {
+const SketchContainer: React.FC<SketchContainerProps> = ({ treeStateRef, onTreeEvent }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const p5InstanceRef = useRef<p5 | null>(null);
 
@@ -15,7 +16,7 @@ const SketchContainer: React.FC<SketchContainerProps> = ({ treeStateRef }) => {
     if (!containerRef.current) return;
 
     // Initialize p5
-    const sketch = createSketch(() => treeStateRef.current);
+    const sketch = createSketch(() => treeStateRef.current, onTreeEvent);
     p5InstanceRef.current = new p5(sketch, containerRef.current);
 
     return () => {
