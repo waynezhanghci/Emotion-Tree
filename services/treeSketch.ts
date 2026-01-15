@@ -1,10 +1,11 @@
 import p5 from "p5";
-import { TreeState } from "../types";
+import { TreeState, FlowerStyle } from "../types";
 
 export type TreeEventType = 'bloom' | 'wither';
 
 export const createSketch = (
   getTreeState: () => TreeState,
+  getFlowerStyle: () => FlowerStyle,
   onTreeEvent?: (event: TreeEventType) => void
 ) => (p: p5) => {
   let currentMood = 0; // smoothed mood
@@ -12,7 +13,6 @@ export const createSketch = (
   
   // State tracking for event triggers (Hysteresis)
   let wasBlooming = false;
-  let wasWithering = false;
   
   // Particle system for falling leaves/flowers
   interface Particle {
@@ -21,9 +21,15 @@ export const createSketch = (
     acc: p5.Vector;
     color: p5.Color;
     size: number;
-    life: number;
-    isDead: boolean;
+    life: number; 
     
+    // Type needed to render correct shape
+    type: 'leaf' | 'flower';
+
+    // Grounding logic
+    isGrounded: boolean;
+    groundY: number;
+
     // Rotation Z (spinning like a wheel on 2D plane)
     angle: number;
     angleVel: number;
@@ -57,13 +63,13 @@ export const createSketch = (
   
   // Configuration
   const MAX_DEPTH = 9;
+  const MAX_PARTICLES = 300; 
   
   // Palette variables (initialized in setup)
   let COL_TRUNK_DORMANT: p5.Color;
   let COL_TRUNK_THRIVE: p5.Color;
   let COL_LEAF_TENDER: p5.Color;
   let COL_FLOWER_PINK: p5.Color;
-  let COL_LEAF_DEAD: p5.Color;
 
   p.setup = () => {
     p.createCanvas(p.windowWidth, p.windowHeight);
@@ -74,7 +80,6 @@ export const createSketch = (
     COL_TRUNK_THRIVE = p.color(100, 70, 50); // Warm Brown
     COL_LEAF_TENDER = p.color(120, 210, 100, 230); // Bright Tender Green
     COL_FLOWER_PINK = p.color(255, 140, 170, 240); // Peach Blossom Pink
-    COL_LEAF_DEAD = p.color(100, 85, 70, 255); // Brown/Grey Dead Leaf
     
     // Generate the static tree skeleton ONCE
     buildTreeSkeleton();
@@ -82,7 +87,6 @@ export const createSketch = (
 
   p.windowResized = () => {
     p.resizeCanvas(p.windowWidth, p.windowHeight);
-    // Rebuild tree on resize to adjust proportions if needed
     buildTreeSkeleton();
   };
 
@@ -129,9 +133,99 @@ export const createSketch = (
     rootBranch.thick = trunkThick;
   };
 
+  // --- Flower Drawing Helpers ---
+  const drawFlowerShape = (style: FlowerStyle, size: number) => {
+    p.noStroke();
+    switch (style) {
+      case 'sakura':
+        // Sakura: 5 petals, sharp pointed shape (Star/Diamond like)
+        // Matching UI Icon path: M0 0 Q -20 -25 0 -45 Q 20 -25 0 0
+        p.fill(COL_FLOWER_PINK);
+        for(let i=0; i<5; i++) {
+            p.push();
+            p.rotate(p.TWO_PI/5 * i);
+            
+            const pLen = size * 0.85; 
+            const pWidth = size * 0.45;
+
+            p.beginShape();
+            p.vertex(0, 0); 
+            // Curve outwards then in to a sharp tip
+            p.quadraticVertex(-pWidth, -pLen * 0.5, 0, -pLen);
+            p.quadraticVertex(pWidth, -pLen * 0.5, 0, 0);
+            p.endShape(p.CLOSE);
+            p.pop();
+        }
+        // Center
+        p.fill(255, 255, 255, 220); 
+        p.circle(0, 0, size * 0.2);
+        break;
+
+      case 'delonix':
+        // Delonix: 5 petals, Spoon/Matchstick shape
+        // Matching UI Icon path: M0 0 L -1.5 -26 A 6 8 0 1 1 1.5 -26 L 0 0
+        // Thin stem, round/oval head.
+        
+        p.fill(COL_FLOWER_PINK);
+        
+        for(let i=0; i<5; i++) {
+           p.push();
+           p.rotate(p.TWO_PI/5 * i);
+           
+           const totalLen = size * 0.95;
+           const headWidth = size * 0.35;
+           const headHeight = size * 0.4;
+           const stemLen = totalLen - headHeight * 0.8;
+           const stemHalfWidth = size * 0.04; // Very thin stem
+
+           p.beginShape();
+           p.vertex(0, 0);
+           // Stem Left
+           p.vertex(-stemHalfWidth, -stemLen);
+           
+           // Head (Spoon bowl)
+           // Draw a bulb shape at the end of the stem
+           p.bezierVertex(
+               -headWidth, -stemLen - headHeight * 0.2, // Control Bottom-Left
+               -headWidth, -totalLen,                   // Control Top-Left
+               0, -totalLen                             // Top Tip
+           );
+           p.bezierVertex(
+               headWidth, -totalLen,                    // Control Top-Right
+               headWidth, -stemLen - headHeight * 0.2,  // Control Bottom-Right
+               stemHalfWidth, -stemLen                  // Stem Right
+           );
+
+           // Stem Right back to center
+           p.vertex(0, 0);
+           p.endShape(p.CLOSE);
+           p.pop();
+        }
+
+        // Small center dot
+        p.fill(255, 200, 100, 150); 
+        p.circle(0, 0, size * 0.15);
+        break;
+
+      case 'peach':
+      default:
+        // Classic 5 round petals
+        p.fill(COL_FLOWER_PINK);
+        for(let i=0; i<5; i++) {
+            p.rotate(p.TWO_PI/5);
+            p.ellipse(0, size*0.4, size*0.5, size*0.6);
+        }
+        // Center
+        p.fill(255, 220, 100); 
+        p.circle(0, 0, size * 0.3);
+        break;
+    }
+  };
+
   p.draw = () => {
-    // 1. Get State & Smooth Transitions
+    // 1. Get State
     const state = getTreeState();
+    const flowerStyle = getFlowerStyle();
     
     // Faster mood smoothing for responsiveness
     currentMood = p.lerp(currentMood, state.mood, 0.1);
@@ -141,7 +235,6 @@ export const createSketch = (
     currentWind = p.lerp(currentWind, targetWind, 0.12);
 
     // --- Event Logic (Hysteresis) ---
-    // Bloom Event: Trigger when mood > 0.6, Reset when mood < 0.2
     if (!wasBlooming && currentMood > 0.6) {
         wasBlooming = true;
         if (onTreeEvent) onTreeEvent('bloom');
@@ -149,33 +242,25 @@ export const createSketch = (
         wasBlooming = false;
     }
 
-    // Wither Event: Trigger when mood < -0.6, Reset when mood > -0.2
-    if (!wasWithering && currentMood < -0.6) {
-        wasWithering = true;
-        if (onTreeEvent) onTreeEvent('wither');
-    } else if (wasWithering && currentMood > -0.2) {
-        wasWithering = false;
-    }
-    // --------------------------------
-
-    // 2. Background
-    let bgCol;
+    // 2. Background handling (Transparency for CSS Gradient)
+    p.clear();
+    
+    // Mood Overlay
+    p.push();
+    p.noStroke();
     if (currentMood > 0) {
-        // Happy: Warm dark grey, slight light
-        bgCol = p.lerpColor(p.color(20, 20, 22), p.color(45, 40, 35), currentMood * 0.6);
+        p.fill(255, 230, 200, currentMood * 20); 
     } else {
-        // Sad: Cold dark grey, dimming further
-        bgCol = p.lerpColor(p.color(20, 20, 22), p.color(5, 5, 8), Math.abs(currentMood));
+        p.fill(5, 5, 15, Math.abs(currentMood) * 180);
     }
-    p.background(bgCol);
+    p.rect(0, 0, p.width, p.height);
+    p.pop();
 
     // 3. Wind Physics
     const time = p.millis() * 0.001;
     const noiseSway = p.map(p.noise(time * 0.6), 0, 1, -0.04, 0.04);
     const windSign = currentWind < 0 ? -1 : 1;
-    // Power function for wind feel
     const effectiveWind = windSign * Math.pow(Math.abs(currentWind), 1.4);
-    // Base sway + Wind sway
     const activeSway = Math.sin(time * 2.5) * (effectiveWind * 0.1) + (effectiveWind * 0.3);
     const totalWindAngle = noiseSway + activeSway;
 
@@ -184,16 +269,15 @@ export const createSketch = (
       p.push();
       p.translate(p.width / 2, p.height); 
       
-      // Calculate globals for manual coordinate tracking
       const startX = p.width / 2;
       const startY = p.height;
       
-      renderBranch(rootBranch, rootBranch.len, rootBranch.thick, totalWindAngle, startX, startY, 0);
+      renderBranch(rootBranch, rootBranch.len, rootBranch.thick, totalWindAngle, startX, startY, 0, flowerStyle);
       p.pop();
     }
 
     // 5. Particles
-    updateParticles(currentWind);
+    updateParticles(currentWind, flowerStyle);
   };
 
   const renderBranch = (
@@ -203,78 +287,46 @@ export const createSketch = (
     windAngle: number,
     x: number, 
     y: number, 
-    cumAngle: number
+    cumAngle: number,
+    flowerStyle: FlowerStyle
   ) => {
-    // Calculate factors
     const bloomFactor = p.map(currentMood, 0, 1, 0, 1, true); 
-    // Wither Factor: 0 when neutral/happy, up to 1 when very sad (-1)
-    const witherFactor = p.map(currentMood, -0.2, -1, 0, 1, true); 
-
-    // Trunk Color
     let branchCol = p.lerpColor(COL_TRUNK_DORMANT, COL_TRUNK_THRIVE, bloomFactor);
-    if (witherFactor > 0) {
-        // Darken and desaturate when withering
-        branchCol = p.lerpColor(branchCol, p.color(20, 18, 16), witherFactor * 0.7);
-    }
 
     p.stroke(branchCol);
     p.strokeWeight(thick);
     p.strokeCap(p.ROUND);
-    
-    // Draw line
     p.line(0, 0, 0, -len);
     
-    // Calculate global tip position
     const tipX = x + Math.sin(cumAngle) * len;
     const tipY = y - Math.cos(cumAngle) * len;
 
-    // Move to tip
     p.translate(0, -len);
 
-    // Foliage & Particles
-    // Only draw foliage on the outer 40% of the tree depth
     if (branch.depth > MAX_DEPTH - 4) {
-      
-      // 1. Attached Foliage Visibility
-      // Using pre-baked threshold: Leaves appear sequentially as bloomFactor increases
       const isAttached = bloomFactor > branch.noiseThreshold;
 
       if (isAttached) {
-         drawAttachedFoliage(windAngle, branch.hasFlower, bloomFactor);
+         drawAttachedFoliage(windAngle, branch.hasFlower, bloomFactor, flowerStyle);
       }
 
-      // 2. Falling Particles
       const time = p.millis();
       const spawnNoise = p.noise(tipX * 0.1, tipY * 0.1, time * 0.008);
       
-      // Sad Mode (Dead Leaves) - "Quickly fall off"
-      // Rate increases significantly with witherFactor
-      if (witherFactor > 0.05) {
-         // High probability of spawn to simulate "shedding"
-         // If witherFactor is 1.0 (very sad), we spawn very aggressively
-         if (spawnNoise > 0.3 && (spawnNoise * 100) % 1.0 < (witherFactor * 0.35)) {
-             spawnFallingParticle(tipX, tipY, true);
-         }
-      }
-
-      // Happy Mode (Live Leaves/Petals) - "Occasional float"
-      if (bloomFactor > 0.5) {
-          // Rare gentle fall
-          if ((spawnNoise * 100) % 1.0 < 0.005) {
-              spawnFallingParticle(tipX, tipY, false);
+      if (bloomFactor > 0.3) {
+          if ((spawnNoise * 100) % 1.0 < 0.02) {
+              spawnFallingParticle(tipX, tipY);
           }
       }
     }
 
     if (branch.depth >= MAX_DEPTH || len < 4) return;
 
-    // Flexibility for wind - tips bend more
     const flexibility = p.map(branch.depth, 0, MAX_DEPTH, 0.05, 1.3);
     const localWind = windAngle * flexibility;
 
     for (const child of branch.children) {
       p.push();
-      // Apply rotation
       const nextAngle = child.angleOffset + localWind;
       p.rotate(nextAngle);
       
@@ -285,19 +337,18 @@ export const createSketch = (
         windAngle, 
         tipX, 
         tipY, 
-        cumAngle + nextAngle
+        cumAngle + nextAngle,
+        flowerStyle
       );
       p.pop();
     }
   };
 
-  const drawAttachedFoliage = (windAngle: number, hasFlower: boolean, bloomFactor: number) => {
+  const drawAttachedFoliage = (windAngle: number, hasFlower: boolean, bloomFactor: number, style: FlowerStyle) => {
     p.noStroke();
     const breathe = 1 + Math.sin(p.millis() * 0.004) * 0.08;
-    // Foliage sways MORE than branches (3x)
     const foliageSway = windAngle * 3.0;
     
-    // Size scales slightly with bloomFactor for the "growing" feel on appear
     const growthScale = p.constrain(bloomFactor * 1.5, 0.5, 1);
     const leafSize = 11 * breathe * growthScale; 
     
@@ -314,47 +365,34 @@ export const createSketch = (
     p.ellipse(0, 0, leafSize, leafSize * 0.5);
     p.pop();
 
-    // Draw Peach Blossom
+    // Draw Flower
     if (hasFlower && bloomFactor > 0.25) {
         const flowerSize = 14 * breathe * growthScale;
         p.push();
         p.rotate(foliageSway);
-        
-        // Petals
-        p.fill(COL_FLOWER_PINK);
-        for(let i=0; i<5; i++) {
-            p.rotate(p.TWO_PI/5);
-            p.ellipse(0, flowerSize*0.4, flowerSize*0.5, flowerSize*0.6);
-        }
-        
-        // Center
-        p.fill(255, 220, 100); 
-        p.circle(0, 0, flowerSize * 0.3);
+        drawFlowerShape(style, flowerSize);
         p.pop();
     }
   };
 
-  const spawnFallingParticle = (x: number, y: number, isDead: boolean) => {
+  const spawnFallingParticle = (x: number, y: number) => {
     if (x < -50 || x > p.width + 50 || y > p.height) return;
 
-    // Initial velocity
-    const vx = isDead 
-        ? p.random(-1, 1) + currentWind * 1.0 
-        : p.random(-0.5, 0.5) + currentWind * 2.5;
-        
-    // Dead particles drop faster (gravity simulation), live ones float
-    const vy = isDead 
-        ? p.random(1.0, 3.0) 
-        : p.random(0.0, 0.5); 
+    const vx = p.random(-0.5, 0.5) + currentWind * 2.5;
+    const vy = p.random(1.5, 3.5); 
+    const groundY = p.height - p.random(0, 15);
+    const isFlower = p.random(1) > 0.5;
 
     particles.push({
       pos: p.createVector(x, y), 
       vel: p.createVector(vx, vy), 
       acc: p.createVector(0, 0), 
-      color: isDead ? COL_LEAF_DEAD : (p.random(1) > 0.5 ? COL_FLOWER_PINK : COL_LEAF_TENDER),
+      color: isFlower ? COL_FLOWER_PINK : COL_LEAF_TENDER, 
+      type: isFlower ? 'flower' : 'leaf',
       size: p.random(7, 12),
       life: 255,
-      isDead: isDead,
+      isGrounded: false,
+      groundY: groundY,
       angle: p.random(p.TWO_PI),
       angleVel: p.random(-0.15, 0.15),
       flip: p.random(p.TWO_PI),
@@ -365,40 +403,36 @@ export const createSketch = (
     });
   };
 
-  const updateParticles = (windForce: number) => {
+  const updateParticles = (windForce: number, currentStyle: FlowerStyle) => {
+    if (particles.length > MAX_PARTICLES) {
+      particles.splice(0, particles.length - MAX_PARTICLES);
+    }
+
     for (let i = particles.length - 1; i >= 0; i--) {
       const part = particles[i];
 
-      // Gravity & Forces
-      if (part.isDead) {
-          // Heavier gravity for dead leaves to simulate "falling off"
-          part.acc.set(0, 0.12); 
-      } else {
-          // Very light gravity for live petals
-          part.acc.set(0, 0.025); 
+      if (!part.isGrounded) {
+        // Falling Physics
+        part.acc.set(0, 0.1); 
+        const turbulence = p.noise(part.pos.x * 0.01, part.pos.y * 0.01, p.frameCount * 0.02) - 0.5;
+        const windEffect = windForce * 0.25; 
+        part.acc.x += windEffect + (turbulence * 0.15);
+        const swayForce = Math.sin(p.frameCount * part.swayFreq + part.swayPhase) * part.swayAmp;
+        part.acc.x += swayForce;
+
+        part.vel.add(part.acc);
+        part.vel.mult(0.94);
+        part.pos.add(part.vel);
+
+        part.angle += part.angleVel;
+        part.flip += part.flipSpeed;
+
+        if (part.pos.y >= part.groundY) {
+            part.isGrounded = true;
+            part.pos.y = part.groundY; 
+            part.vel.set(0, 0); 
+        }
       }
-
-      // Wind & Turbulence
-      const turbulence = p.noise(part.pos.x * 0.01, part.pos.y * 0.01, p.frameCount * 0.02) - 0.5;
-      const windEffect = windForce * 0.25; 
-      part.acc.x += windEffect + (turbulence * 0.15);
-
-      // Aerodynamic Sway (Flutter)
-      const swayForce = Math.sin(p.frameCount * part.swayFreq + part.swayPhase) * part.swayAmp;
-      part.acc.x += swayForce;
-
-      part.vel.add(part.acc);
-      
-      // Drag/Air Resistance
-      const drag = part.isDead ? 0.96 : 0.94; 
-      part.vel.mult(drag);
-      part.pos.add(part.vel);
-
-      // Rotation
-      part.angle += part.angleVel;
-      part.flip += part.flipSpeed;
-      // Double fade speed: 3.0 for dead, 1.6 for live
-      part.life -= part.isDead ? 3.0 : 1.6; 
 
       // Render
       p.push();
@@ -406,18 +440,25 @@ export const createSketch = (
       p.rotate(part.angle); 
       
       const tumbleScale = Math.cos(part.flip);
-      p.scale(1, Math.abs(tumbleScale)); 
+      const renderScale = part.isGrounded ? 0.2 : Math.abs(tumbleScale);
+      
+      p.scale(1, Math.max(0.1, renderScale)); 
       
       const c = p.color(part.color);
-      c.setAlpha(part.life);
+      c.setAlpha(part.isGrounded ? 200 : 255);
       
-      p.fill(c);
-      p.noStroke();
-      // Simple shape for particle (petal/leaf)
-      p.ellipse(0, 0, part.size, part.size * 0.7);
+      if (part.type === 'flower') {
+        // Use the global style for flowers, so they update instantly when user clicks
+        drawFlowerShape(currentStyle, part.size);
+      } else {
+        // Leaves
+        p.fill(c);
+        p.noStroke();
+        p.ellipse(0, 0, part.size, part.size * 0.7);
+      }
       p.pop();
 
-      if (part.life <= 0 || part.pos.y > p.height + 50) {
+      if (part.pos.x < -100 || part.pos.x > p.width + 100) {
         particles.splice(i, 1);
       }
     }

@@ -1,22 +1,34 @@
 import React, { useRef, useEffect } from "react";
 import p5 from "p5";
 import { createSketch, TreeEventType } from "../services/treeSketch";
-import { TreeState } from "../types";
+import { TreeState, FlowerStyle } from "../types";
 
 interface SketchContainerProps {
   treeStateRef: React.MutableRefObject<TreeState>;
   onTreeEvent?: (event: TreeEventType) => void;
+  flowerStyle: FlowerStyle;
 }
 
-const SketchContainer: React.FC<SketchContainerProps> = ({ treeStateRef, onTreeEvent }) => {
+const SketchContainer: React.FC<SketchContainerProps> = ({ treeStateRef, onTreeEvent, flowerStyle }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const p5InstanceRef = useRef<p5 | null>(null);
+  const flowerStyleRef = useRef<FlowerStyle>(flowerStyle);
+
+  // Keep the ref updated so the sketch can access the latest value without re-init
+  useEffect(() => {
+    flowerStyleRef.current = flowerStyle;
+  }, [flowerStyle]);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     // Initialize p5
-    const sketch = createSketch(() => treeStateRef.current, onTreeEvent);
+    // Pass a getter for flowerStyle
+    const sketch = createSketch(
+      () => treeStateRef.current, 
+      () => flowerStyleRef.current,
+      onTreeEvent
+    );
     p5InstanceRef.current = new p5(sketch, containerRef.current);
 
     return () => {

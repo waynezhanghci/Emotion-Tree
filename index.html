@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#111425" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Emotion Tree</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -11,9 +14,18 @@
         padding: 0;
         overflow: hidden;
         background-color: #1a1a1a;
+        touch-action: none; /* Prevent scrolling on mobile */
       }
       canvas {
         display: block;
+      }
+      /* Breathing Animation for the Start Button */
+      @keyframes breathe {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(244, 143, 177, 0); }
+        50% { transform: scale(1.05); box-shadow: 0 0 20px rgba(244, 143, 177, 0.4); }
+      }
+      .animate-breathe {
+        animation: breathe 3s infinite ease-in-out;
       }
     </style>
   <script type="importmap">

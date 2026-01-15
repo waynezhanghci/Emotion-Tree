@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Emotion Tree - Interactive Wallpaper",
+  "version": "1.0.0",
+  "description": "An interactive generative art New Tab page that blooms with your smile and waves with your hand.",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "permissions": [
+    "videoCapture",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://cdn.jsdelivr.net/*",
+    "https://storage.googleapis.com/*"
+  ],
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}
